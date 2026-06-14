@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="A decision dashboard for comparing part-time and flexible tech bridge roles while keeping a full-time job.">
+    <title>Tech Bridge Job Navigator</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Career transition command center</p>
+          <h1>Tech Bridge Job Navigator</h1>
+          <p class="lead">Score, compare, and track bridge roles without turning job research into doom-scrolling.</p>
+        </div>
+        <div class="topbar-actions">
+          <button class="icon-button" id="themeToggle" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">DM</button>
+          <button class="primary-button" id="newJobButton" type="button">Add Job</button>
+        </div>
+      </header>
+
+      <nav class="tabs" aria-label="Primary">
+        <button class="tab-button active" type="button" data-tab="dashboard">Dashboard</button>
+        <button class="tab-button" type="button" data-tab="tracker">Job Tracker</button>
+        <button class="tab-button" type="button" data-tab="keywords">Resume Keywords</button>
+        <button class="tab-button" type="button" data-tab="strategy">Career Strategy</button>
+      </nav>
+
+      <main>
+        <section class="tab-panel active" id="dashboard" aria-labelledby="dashboard-tab">
+          <div class="metric-grid" id="metricGrid"></div>
+
+          <div class="section-grid">
+            <section class="panel wide">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Decision stack</p>
+                  <h2>Best Roles by Bridge Score</h2>
+                </div>
+              </div>
+              <div class="rank-list" id="bestRoles"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Keep runway intact</p>
+                  <h2>Best Part-Time Roles</h2>
+                </div>
+              </div>
+              <div class="compact-list" id="partTimeRoles"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Longer-term move</p>
+                  <h2>Full-Time Future Targets</h2>
+                </div>
+              </div>
+              <div class="compact-list" id="futureTargets"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Domain leverage</p>
+                  <h2>Insurtech Bridge Roles</h2>
+                </div>
+              </div>
+              <div class="compact-list" id="insurtechRoles"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Pipeline</p>
+                  <h2>Applied Roles</h2>
+                </div>
+              </div>
+              <div class="compact-list" id="appliedRoles"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Next actions</p>
+                  <h2>Needs Follow-Up</h2>
+                </div>
+              </div>
+              <div class="compact-list" id="followUpRoles"></div>
+            </section>
+
+            <section class="panel wide">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Lane health</p>
+                  <h2>Average Score by Lane</h2>
+                </div>
+              </div>
+              <div class="bar-chart" id="laneChart" aria-label="Average score by lane"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="tab-panel" id="tracker">
+          <div class="tracker-layout">
+            <aside class="panel filters-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Control surface</p>
+                  <h2>Filters</h2>
+                </div>
+              </div>
+              <div class="control-stack">
+                <label>
+                  Search
+                  <input id="searchInput" type="search" placeholder="Title, company, notes">
+                </label>
+                <label>
+                  Lane
+                  <select id="laneFilter"></select>
+                </label>
+                <label>
+                  Status
+                  <select id="statusFilter"></select>
+                </label>
+                <label>
+                  Employment type
+                  <select id="employmentFilter"></select>
+                </label>
+                <label>
+                  Schedule
+                  <select id="scheduleFilter"></select>
+                </label>
+                <label>
+                  Minimum Bridge Score
+                  <input id="minScoreFilter" type="range" min="0" max="80" value="0">
+                  <span class="range-readout" id="minScoreReadout">0</span>
+                </label>
+                <label>
+                  Sort by
+                  <select id="sortSelect">
+                    <option value="score">Bridge Score</option>
+                    <option value="pay">Pay</option>
+                    <option value="tech_exposure">Tech Exposure</option>
+                    <option value="schedule_fit">Schedule Fit</option>
+                    <option value="exit_value">Exit Value</option>
+                  </select>
+                </label>
+                <div class="button-row">
+                  <button class="secondary-button" id="resetFiltersButton" type="button">Reset</button>
+                  <button class="secondary-button danger" id="restoreSamplesButton" type="button">Restore Samples</button>
+                </div>
+              </div>
+            </aside>
+
+            <section class="jobs-column">
+              <div class="list-toolbar">
+                <div>
+                  <p class="eyebrow">Manual research tracker</p>
+                  <h2 id="jobCountHeading">Jobs</h2>
+                </div>
+                <div class="button-row">
+                  <button class="secondary-button" id="exportJsonButton" type="button">Export JSON</button>
+                  <button class="secondary-button" id="exportCsvButton" type="button">Export CSV</button>
+                  <label class="file-button">
+                    Import JSON
+                    <input id="importFileInput" type="file" accept="application/json,.json">
+                  </label>
+                </div>
+              </div>
+
+              <details class="import-box">
+                <summary>Paste JSON import</summary>
+                <textarea id="importTextArea" rows="5" placeholder="Paste exported JSON here"></textarea>
+                <button class="secondary-button" id="importTextButton" type="button">Import Pasted JSON</button>
+              </details>
+
+              <div class="job-grid" id="jobList"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="tab-panel" id="keywords">
+          <div class="page-heading">
+            <p class="eyebrow">Resume signal builder</p>
+            <h2>Lane Keywords</h2>
+            <p>Use these to align job notes, resume bullets, GitHub project descriptions, and interview stories with the bridge lane you are targeting.</p>
+          </div>
+          <div class="keyword-grid" id="keywordGrid"></div>
+        </section>
+
+        <section class="tab-panel" id="strategy">
+          <div class="strategy-grid">
+            <section class="panel wide">
+              <p class="eyebrow">Operating principle</p>
+              <h2>Keep the $80K Full-Time Job as Runway</h2>
+              <p>The full-time job is the funding engine. Bridge roles should add cash, tech exposure, proof, and network without burning down family time or the current income base.</p>
+              <div class="principle-grid">
+                <article>
+                  <h3>Take</h3>
+                  <p>Part-time or flexible roles that expose you to tickets, users, hardware, systems, automation, infrastructure, or insurance technology.</p>
+                </article>
+                <article>
+                  <h3>Avoid</h3>
+                  <p>Low-value second jobs that only consume evenings and weekends without improving technical credibility or transition leverage.</p>
+                </article>
+                <article>
+                  <h3>Ask</h3>
+                  <p>Will this role create resume evidence, useful contacts, realistic learning reps, and an exit path into a better tech role?</p>
+                </article>
+              </div>
+            </section>
+
+            <section class="panel">
+              <p class="eyebrow">Target order</p>
+              <h2>Best Lanes for This Transition</h2>
+              <ol class="strategy-list">
+                <li><span>Part-time IT Support</span><strong>Fastest credible tech proof while keeping income stable.</strong></li>
+                <li><span>Data Center / Infrastructure</span><strong>Good fit for homelab, server hardware, cabling, and uptime mindset.</strong></li>
+                <li><span>Automation / Systems</span><strong>Uses Python, Flask, dashboards, CSV processing, and workflow automation.</strong></li>
+                <li><span>Insurtech / Insurance Systems</span><strong>Combines 15+ years insurance operations with technical systems work.</strong></li>
+                <li><span>Freelance Small Business Automation</span><strong>Useful side proof if scoped tightly and protected from time creep.</strong></li>
+              </ol>
+            </section>
+
+            <section class="panel">
+              <p class="eyebrow">Decision rule</p>
+              <h2>Bridge Role Test</h2>
+              <ul class="check-list">
+                <li>Cash does not need to replace the full-time job.</li>
+                <li>Schedule must protect sleep, family time, and job performance.</li>
+                <li>Tech exposure must be specific enough to become resume bullets.</li>
+                <li>People fit matters because the network is part of the payoff.</li>
+                <li>Stress cost must be treated as a real negative score.</li>
+              </ul>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="jobDialog">
+      <form method="dialog" id="jobForm" class="job-form">
+        <div class="dialog-header">
+          <div>
+            <p class="eyebrow">Role dossier</p>
+            <h2 id="dialogTitle">Add Job</h2>
+          </div>
+          <button class="icon-button" type="button" id="closeDialogButton" aria-label="Close">X</button>
+        </div>
+
+        <input type="hidden" id="jobId">
+        <div class="form-grid">
+          <label>
+            Job title
+            <input id="titleInput" required>
+          </label>
+          <label>
+            Company
+            <input id="companyInput" required>
+          </label>
+          <label>
+            Location
+            <input id="locationInput" required>
+          </label>
+          <label>
+            Apply URL
+            <input id="urlInput" type="url" placeholder="https://">
+          </label>
+          <label>
+            Employment type
+            <select id="employmentInput" required></select>
+          </label>
+          <label>
+            Schedule
+            <select id="scheduleInput" required></select>
+          </label>
+          <label>
+            Pay range
+            <input id="payInput" placeholder="$25-$35/hr">
+          </label>
+          <label>
+            Commute estimate
+            <input id="commuteInput" placeholder="25 min each way">
+          </label>
+          <label>
+            Role lane
+            <select id="laneInput" required></select>
+          </label>
+          <label>
+            Status
+            <select id="statusInput" required></select>
+          </label>
+        </div>
+
+        <section class="score-editor">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Weighted decision model</p>
+              <h3>Scoring</h3>
+            </div>
+            <div class="live-score" id="liveScore">0</div>
+          </div>
+          <div class="slider-grid" id="sliderGrid"></div>
+        </section>
+
+        <section>
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Research notes</p>
+              <h3>Role Intelligence</h3>
+            </div>
+          </div>
+          <div class="notes-grid">
+            <label>
+              Why this fits me
+              <textarea id="fitNotesInput" rows="3"></textarea>
+            </label>
+            <label>
+              What I need to learn
+              <textarea id="learnNotesInput" rows="3"></textarea>
+            </label>
+            <label>
+              Resume keywords
+              <textarea id="keywordNotesInput" rows="3"></textarea>
+            </label>
+            <label>
+              Questions to ask in interview
+              <textarea id="questionsNotesInput" rows="3"></textarea>
+            </label>
+            <label>
+              Red flags
+              <textarea id="redFlagsNotesInput" rows="3"></textarea>
+            </label>
+          </div>
+        </section>
+
+        <div class="dialog-actions">
+          <button class="secondary-button danger" id="deleteJobButton" type="button">Delete</button>
+          <span class="spacer"></span>
+          <button class="secondary-button" type="button" id="cancelDialogButton">Cancel</button>
+          <button class="primary-button" type="submit">Save Job</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
