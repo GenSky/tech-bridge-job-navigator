@@ -722,10 +722,8 @@ async function runAutoFinder() {
   }
 
   finderResults = dedupeDiscoveredJobs(discovered)
-    .filter(isTargetBridgeRole)
-    .filter(isLocationCompatible)
     .map((job) => enrichDiscoveredJob(job, location))
-    .sort((a, b) => b.bridgeScore - a.bridgeScore);
+    .sort((a, b) => b.matchScore - a.matchScore || b.bridgeScore - a.bridgeScore);
 
   renderSourceStatus(sourceStatuses);
   renderFinderResults();
@@ -818,6 +816,10 @@ function enrichDiscoveredJob(job, targetLocation) {
   const scores = inferScores(text, lane, employmentType, schedule, job.remote);
   const bridgeScore = calculateScore(scores);
   const decision = getDecisionLabel(bridgeScore);
+  const directBridgeMatch = isTargetBridgeRole(job);
+  const locationMatch = isLocationCompatible(job);
+  const badFit = isBadFinderFit(text);
+  const relevanceScore = scoreDiscoveryRelevance(text, directBridgeMatch, locationMatch);
 
   return {
     ...job,
@@ -826,6 +828,8 @@ function enrichDiscoveredJob(job, targetLocation) {
     schedule,
     scores,
     bridgeScore,
+    matchScore: bridgeScore + relevanceScore,
+    matchQuality: getMatchQuality(directBridgeMatch, locationMatch, badFit),
     decision,
     targetLocation
   };
@@ -894,9 +898,11 @@ function inferScores(text, lane, employmentType, schedule, remote) {
 function renderFinderResults() {
   const minScore = Number($("#finderMinScoreInput").value);
   const flexibleOnly = $("#finderFlexibleOnlyInput").checked;
-  const visible = finderResults
+  const candidates = finderResults
     .filter((job) => job.bridgeScore >= minScore)
-    .filter((job) => !flexibleOnly || isFlexibleFinderMatch(job))
+    .filter((job) => !flexibleOnly || isFlexibleFinderMatch(job));
+  const focusedCandidates = candidates.filter((job) => job.matchQuality !== "Broad API candidate");
+  const visible = (focusedCandidates.length ? focusedCandidates : candidates)
     .slice(0, 80);
 
   $("#finderCountHeading").textContent = finderHasRun ? `${visible.length} Suggested Roles` : "No search run yet";
@@ -918,6 +924,7 @@ function renderFinderResults() {
       </div>
       <div class="badge-row">
         <span class="label-badge ${job.decision.className}">${escapeHtml(job.decision.text)}</span>
+        <span class="badge">${escapeHtml(job.matchQuality)}</span>
         <span class="badge">${escapeHtml(job.lane)}</span>
         <span class="badge">${escapeHtml(job.employmentType)}</span>
         <span class="badge">${escapeHtml(job.schedule)}</span>
@@ -1037,15 +1044,39 @@ function isTargetBridgeRole(job) {
   return targetBody.test(text) && /(support|analyst|technician|specialist|implementation|automation|systems)/i.test(title);
 }
 
+function scoreDiscoveryRelevance(text, directBridgeMatch, locationMatch) {
+  let score = 0;
+  if (directBridgeMatch) score += 80;
+  if (locationMatch) score += 24;
+  if (/help desk|desktop support|it support|technical support|product support|application support|service desk|support engineer|support specialist|support analyst|support technician|systems analyst|implementation specialist|workflow automation|data center|noc technician/.test(text)) score += 28;
+  if (/part[\s-]?time|contract|weekend|evening|flexible|remote/.test(text)) score += 10;
+  if (/ticket|endpoint|microsoft 365|active directory|windows support|macos support|hardware|user support|uat|business requirements|underwriting|claims|policy systems/.test(text)) score += 16;
+  if (/sales|account executive|marketing|copywriter|writer|recruit|brand manager|designer|software engineer|developer|video editor|office assistant|administrative assistant|learning & development|head of|director|vp/.test(text)) score -= 70;
+  if (/germany|deutschland|berlin|munich|augsburg|brazil|latam|europe only|india|australia only|peru|lima|gmbh/.test(text)) score -= 45;
+  return score;
+}
+
+function getMatchQuality(directBridgeMatch, locationMatch, badFit) {
+  if (badFit && !directBridgeMatch) return "Broad API candidate";
+  if (directBridgeMatch && locationMatch) return "Direct API match";
+  if (directBridgeMatch) return "Role match, verify location";
+  if (locationMatch) return "Adjacent tech candidate";
+  return "Broad API candidate";
+}
+
+function isBadFinderFit(text) {
+  return /sales|account executive|account payable|marketing|copywriter|writer|recruit|brand manager|designer|software engineer|full.stack|frontend|backend|developer|video editor|office assistant|administrative assistant|learning & development|product manager|social media|template|head of|director|vp/.test(text);
+}
+
 function isLocationCompatible(job) {
   const location = String(job.location || "").toLowerCase();
   const text = `${job.title || ""} ${job.company || ""} ${location} ${job.description || ""}`.toLowerCase();
-  const locationPositive = /(worldwide|usa|u\.s\.|united states|americas|north america|california|san francisco|bay area|oakland|walnut creek|cupertino|south san francisco|san jose|san mateo|dublin)/;
-  const regionNegative = /(germany|deutschland|berlin|munich|augsburg|brazil|latam|europe only|europe,|israel|india|australia only|m\/w\/d|gmbh)/;
+  const locationPositive = /(remote|worldwide|usa|u\.s\.|united states|americas|north america|california|san francisco|bay area|oakland|walnut creek|cupertino|south san francisco|san jose|san mateo|dublin)/;
+  const regionNegative = /(canada|germany|deutschland|berlin|munich|augsburg|brazil|latam|europe only|europe,|israel|india|australia only|peru|lima|m\/w\/d|gmbh)/;
 
   if (regionNegative.test(text) && !/(usa|u\.s\.|united states|north america|americas|worldwide)/.test(location)) return false;
-  if (locationPositive.test(text)) return true;
-  if (job.source === "Remotive" && job.remote) return true;
+  if (locationPositive.test(location)) return true;
+  if (job.source === "Remotive" && job.remote) return /(worldwide|usa|u\.s\.|united states|americas|north america|remote)/.test(location);
   return Boolean(job.remote && locationPositive.test(location));
 }
 
