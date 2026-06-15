@@ -6,7 +6,9 @@ It is built for a mid-career insurance operations professional who wants a pract
 
 ## What It Does
 
+- Finds jobs from compliant public job APIs in the Auto Finder review queue.
 - Tracks job options with title, company, location, apply URL, employment type, schedule, pay range, commute, lane, and status.
+- Saves Auto Finder results into the tracker with one click.
 - Scores each role using weighted 0-10 sliders for cash, schedule fit, tech exposure, people fit, exit value, and stress cost.
 - Calculates a Bridge Score and decision label:
   - 75+ = Strong bridge role
@@ -18,6 +20,20 @@ It is built for a mid-career insurance operations professional who wants a pract
 - Exports and imports JSON.
 - Exports CSV for spreadsheet backup.
 - Includes lane-specific resume keywords and a built-in career strategy guide.
+
+## Auto Finder
+
+The `Auto Finder` tab searches public job feeds, predicts the best role lane, estimates the Bridge Score, and builds a review queue. Use `Save to Tracker` to move a discovered role into your decision dashboard.
+
+Current automatic sources:
+
+- Remotive public remote-jobs API.
+- Arbeitnow public job-board API, filtered locally for bridge-role keywords.
+- RemoteOK public API, filtered locally for bridge-role keywords.
+
+Static GitHub Pages apps cannot safely scrape LinkedIn, Indeed, Dice, Google Jobs, or employer career pages. For those sources, the app generates targeted search links instead of scraping them.
+
+If a public API blocks browser requests, the source status panel will show that it is unavailable. The generated search links still work as a compliant fallback.
 
 ## Run Locally
 
@@ -80,7 +96,7 @@ Increase a weight when that factor matters more. Keep `stress_cost` negative bec
 
 ## Safe Research Workflow
 
-This MVP is manual by design. It does not scrape job boards or automate behavior that could violate job board terms. Use it by entering saved roles, URLs, notes, and copied research manually.
+This app avoids scraping job boards or automating behavior that could violate job board terms. Automatic discovery is limited to public APIs and user-opened search links.
 
 Safe future integrations:
 

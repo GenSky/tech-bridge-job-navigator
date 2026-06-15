@@ -24,6 +24,7 @@
 
       <nav class="tabs" aria-label="Primary">
         <button class="tab-button active" type="button" data-tab="dashboard">Dashboard</button>
+        <button class="tab-button" type="button" data-tab="finder">Auto Finder</button>
         <button class="tab-button" type="button" data-tab="tracker">Job Tracker</button>
         <button class="tab-button" type="button" data-tab="keywords">Resume Keywords</button>
         <button class="tab-button" type="button" data-tab="strategy">Career Strategy</button>
@@ -102,6 +103,73 @@
                 </div>
               </div>
               <div class="bar-chart" id="laneChart" aria-label="Average score by lane"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="tab-panel" id="finder">
+          <div class="finder-layout">
+            <aside class="panel filters-panel">
+              <div class="panel-header">
+                <div>
+                  <p class="eyebrow">Compliant discovery</p>
+                  <h2>Auto Finder</h2>
+                </div>
+              </div>
+              <div class="control-stack">
+                <label>
+                  Target location
+                  <input id="finderLocationInput" value="Bay Area OR remote" placeholder="Bay Area OR remote">
+                </label>
+                <label>
+                  Search pack
+                  <select id="finderPackSelect">
+                    <option value="bridge">Bridge roles</option>
+                    <option value="support">IT and desktop support</option>
+                    <option value="systems">Systems and automation</option>
+                    <option value="insurance">Insurance systems</option>
+                    <option value="field">Field and infrastructure</option>
+                  </select>
+                </label>
+                <label>
+                  Minimum predicted score
+                  <input id="finderMinScoreInput" type="range" min="0" max="80" value="35">
+                  <span class="range-readout" id="finderMinScoreReadout">35</span>
+                </label>
+                <label class="checkbox-label">
+                  <input id="finderFlexibleOnlyInput" type="checkbox" checked>
+                  Prioritize remote, part-time, contract, flexible, evening, and weekend language
+                </label>
+                <button class="primary-button" id="runFinderButton" type="button">Find Jobs</button>
+              </div>
+            </aside>
+
+            <section class="jobs-column">
+              <div class="list-toolbar">
+                <div>
+                  <p class="eyebrow">Review queue</p>
+                  <h2 id="finderCountHeading">No search run yet</h2>
+                </div>
+                <div class="button-row">
+                  <button class="secondary-button" id="clearFinderButton" type="button">Clear Results</button>
+                </div>
+              </div>
+
+              <div class="source-status" id="sourceStatus"></div>
+              <div class="finder-grid" id="finderResults">
+                <p class="empty-state">Run Auto Finder to pull roles from public job APIs and score them against your bridge-role criteria.</p>
+              </div>
+
+              <section class="panel search-links-panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">No scraping fallback</p>
+                    <h2>Generated Search Links</h2>
+                  </div>
+                </div>
+                <p class="panel-copy">Some local job boards do not offer public APIs. These links open targeted searches without scraping or violating terms.</p>
+                <div class="search-link-grid" id="searchLinkGrid"></div>
+              </section>
             </section>
           </div>
         </section>

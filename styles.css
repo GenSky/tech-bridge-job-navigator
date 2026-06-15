@@ -307,7 +307,8 @@ body.light .import-box {
   grid-column: 1 / -1;
 }
 
-.tracker-layout {
+.tracker-layout,
+.finder-layout {
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
   gap: 18px;
@@ -398,6 +399,12 @@ input[type="range"] {
   gap: 14px;
 }
 
+.finder-grid {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
 .job-card {
   display: grid;
   gap: 14px;
@@ -418,6 +425,94 @@ input[type="range"] {
 .note-preview,
 .empty-state {
   color: var(--muted);
+}
+
+.source-status {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.source-pill {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--soft);
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 0.86rem;
+}
+
+.source-pill strong {
+  color: var(--text);
+}
+
+.finder-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(16, 29, 36, 0.9);
+}
+
+body.light .finder-card {
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.finder-card h3 {
+  margin-bottom: 2px;
+}
+
+.finder-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.panel-copy {
+  color: var(--soft);
+}
+
+.search-links-panel {
+  margin-top: 18px;
+}
+
+.search-link-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.search-link {
+  display: grid;
+  gap: 3px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--text);
+  text-decoration: none;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.search-link span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.checkbox-label input {
+  width: auto;
+  margin-top: 3px;
 }
 
 .badge-row {
@@ -739,7 +834,8 @@ dialog::backdrop {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .tracker-layout {
+  .tracker-layout,
+  .finder-layout {
     grid-template-columns: 1fr;
   }
 
@@ -770,6 +866,7 @@ dialog::backdrop {
   .section-grid,
   .strategy-grid,
   .job-grid,
+  .search-link-grid,
   .keyword-grid,
   .principle-grid,
   .form-grid,

@@ -111,6 +111,70 @@ const KEYWORDS = {
   ]
 };
 
+const FINDER_PACKS = {
+  bridge: [
+    "part time IT support",
+    "desktop support",
+    "help desk technician",
+    "technical support specialist",
+    "implementation specialist",
+    "business systems analyst",
+    "workflow automation analyst",
+    "insurance systems analyst"
+  ],
+  support: [
+    "part time IT support",
+    "desktop support",
+    "help desk",
+    "technical support",
+    "endpoint support",
+    "Microsoft 365 support"
+  ],
+  systems: [
+    "business systems analyst",
+    "workflow automation",
+    "Python automation",
+    "internal tools",
+    "implementation specialist",
+    "product support analyst"
+  ],
+  insurance: [
+    "insurance systems analyst",
+    "underwriting systems analyst",
+    "claims application analyst",
+    "insurtech product support",
+    "insurance software support",
+    "business analyst insurance"
+  ],
+  field: [
+    "data center technician",
+    "NOC technician",
+    "field technician",
+    "low voltage technician",
+    "CCTV technician",
+    "remote hands"
+  ]
+};
+
+const SEARCH_LINK_SOURCES = [
+  {
+    name: "Google Jobs",
+    buildUrl: (query, location) => `https://www.google.com/search?q=${encodeURIComponent(`${query} ${location} jobs`)}`
+  },
+  {
+    name: "LinkedIn Jobs",
+    buildUrl: (query, location) => `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(query)}&location=${encodeURIComponent(location)}`
+  },
+  {
+    name: "Indeed",
+    buildUrl: (query, location) => `https://www.indeed.com/jobs?q=${encodeURIComponent(query)}&l=${encodeURIComponent(location)}`
+  },
+  {
+    name: "Dice",
+    buildUrl: (query, location) => `https://www.dice.com/jobs?q=${encodeURIComponent(query)}&location=${encodeURIComponent(location)}`
+  }
+];
+
 const STARTER_JOBS = [
   {
     title: "Part-time Desktop Support",
@@ -304,6 +368,8 @@ const STARTER_JOBS = [
 ];
 
 let jobs = [];
+let finderResults = [];
+let finderHasRun = false;
 let activeTab = "dashboard";
 
 const $ = (selector) => document.querySelector(selector);
@@ -343,6 +409,15 @@ function bindEvents() {
   $("#exportCsvButton").addEventListener("click", exportCsv);
   $("#importFileInput").addEventListener("change", importJsonFile);
   $("#importTextButton").addEventListener("click", importJsonText);
+  $("#runFinderButton").addEventListener("click", runAutoFinder);
+  $("#clearFinderButton").addEventListener("click", clearFinderResults);
+  $("#finderMinScoreInput").addEventListener("input", () => {
+    $("#finderMinScoreReadout").textContent = $("#finderMinScoreInput").value;
+    renderFinderResults();
+  });
+  $("#finderPackSelect").addEventListener("change", renderSearchLinks);
+  $("#finderLocationInput").addEventListener("input", renderSearchLinks);
+  $("#finderFlexibleOnlyInput").addEventListener("change", renderFinderResults);
 }
 
 function populateStaticControls() {
@@ -438,6 +513,7 @@ function renderAll() {
   renderDashboard();
   renderJobList();
   renderKeywords();
+  renderSearchLinks();
 }
 
 function renderDashboard() {
@@ -600,6 +676,393 @@ function renderKeywords() {
       </ul>
     </article>
   `).join("");
+}
+
+async function runAutoFinder() {
+  const button = $("#runFinderButton");
+  const pack = $("#finderPackSelect").value;
+  const queries = FINDER_PACKS[pack] || FINDER_PACKS.bridge;
+  const location = $("#finderLocationInput").value.trim() || "Bay Area OR remote";
+
+  button.disabled = true;
+  button.textContent = "Finding...";
+  $("#finderCountHeading").textContent = "Searching public feeds";
+  $("#sourceStatus").innerHTML = "";
+  $("#finderResults").innerHTML = emptyState("Searching compliant public job APIs...");
+
+  const sourceStatuses = [];
+  const discovered = [];
+  finderHasRun = true;
+
+  const remotiveSettled = await Promise.allSettled(queries.map((query) => fetchRemotive(query)));
+  const remotiveJobs = remotiveSettled.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+  const remotiveFailures = remotiveSettled.filter((result) => result.status === "rejected").length;
+  sourceStatuses.push({
+    name: "Remotive public API",
+    message: remotiveFailures ? `${remotiveJobs.length} results, ${remotiveFailures} query failures` : `${remotiveJobs.length} results`
+  });
+  discovered.push(...remotiveJobs);
+
+  try {
+    const arbeitnowJobs = await fetchArbeitnow(queries);
+    sourceStatuses.push({ name: "Arbeitnow public API", message: `${arbeitnowJobs.length} filtered results` });
+    discovered.push(...arbeitnowJobs);
+  } catch (error) {
+    console.error(error);
+    sourceStatuses.push({ name: "Arbeitnow public API", message: "Blocked or unavailable in this browser" });
+  }
+
+  try {
+    const remoteOkJobs = await fetchRemoteOk(queries);
+    sourceStatuses.push({ name: "RemoteOK public API", message: `${remoteOkJobs.length} filtered results` });
+    discovered.push(...remoteOkJobs);
+  } catch (error) {
+    console.error(error);
+    sourceStatuses.push({ name: "RemoteOK public API", message: "Blocked or unavailable in this browser" });
+  }
+
+  finderResults = dedupeDiscoveredJobs(discovered)
+    .filter(isTargetBridgeRole)
+    .filter(isLocationCompatible)
+    .map((job) => enrichDiscoveredJob(job, location))
+    .sort((a, b) => b.bridgeScore - a.bridgeScore);
+
+  renderSourceStatus(sourceStatuses);
+  renderFinderResults();
+  renderSearchLinks();
+  showToast(`Auto Finder found ${finderResults.length} possible roles.`);
+
+  button.disabled = false;
+  button.textContent = "Find Jobs";
+}
+
+async function fetchRemotive(query) {
+  const response = await fetch(`https://remotive.com/api/remote-jobs?search=${encodeURIComponent(query)}`);
+  if (!response.ok) throw new Error(`Remotive failed: ${response.status}`);
+  const payload = await response.json();
+  return (payload.jobs || []).map((job) => ({
+    source: "Remotive",
+    sourceId: `remotive-${job.id}`,
+    title: job.title || "",
+    company: job.company_name || "",
+    location: job.candidate_required_location || "Remote",
+    url: job.url || "",
+    payRange: job.salary || "",
+    description: stripHtml(job.description || ""),
+    remote: true,
+    rawType: job.job_type || "remote",
+    postedAt: job.publication_date || ""
+  }));
+}
+
+async function fetchArbeitnow(queries) {
+  const response = await fetch("https://www.arbeitnow.com/api/job-board-api");
+  if (!response.ok) throw new Error(`Arbeitnow failed: ${response.status}`);
+  const payload = await response.json();
+  const needles = queries.flatMap((query) => query.toLowerCase().split(/\s+/)).filter((word) => word.length > 3);
+
+  return (payload.data || [])
+    .filter((job) => {
+      const text = `${job.title || ""} ${job.company_name || ""} ${job.location || ""} ${stripHtml(job.description || "")} ${(job.tags || []).join(" ")} ${(job.job_types || []).join(" ")}`.toLowerCase();
+      return needles.some((word) => text.includes(word)) || /support|analyst|technician|automation|systems|infrastructure|insurance|help desk|desktop/i.test(text);
+    })
+    .slice(0, 60)
+    .map((job) => ({
+      source: "Arbeitnow",
+      sourceId: `arbeitnow-${job.slug}`,
+      title: job.title || "",
+      company: job.company_name || "",
+      location: job.location || (job.remote ? "Remote" : "Unknown"),
+      url: job.url || "",
+      payRange: "",
+      description: stripHtml(job.description || ""),
+      remote: Boolean(job.remote),
+      rawType: (job.job_types || []).join(", ") || "unknown",
+      postedAt: job.created_at ? new Date(job.created_at * 1000).toISOString() : ""
+    }));
+}
+
+async function fetchRemoteOk(queries) {
+  const response = await fetch("https://remoteok.com/api");
+  if (!response.ok) throw new Error(`RemoteOK failed: ${response.status}`);
+  const payload = await response.json();
+  const needles = queries.map((query) => query.toLowerCase());
+
+  return (payload || [])
+    .filter((job) => job && job.position && job.company)
+    .filter((job) => {
+      const text = `${job.position || ""} ${job.company || ""} ${job.location || ""} ${job.description || ""} ${(job.tags || []).join(" ")}`.toLowerCase();
+      return needles.some((query) => text.includes(query)) || /support|help desk|desktop|technician|implementation|systems analyst|automation|insurance/.test(text);
+    })
+    .slice(0, 80)
+    .map((job) => ({
+      source: "RemoteOK",
+      sourceId: `remoteok-${job.id || job.slug || job.url}`,
+      title: job.position || "",
+      company: job.company || "",
+      location: job.location || "Remote",
+      url: job.url || "",
+      payRange: formatRemoteOkPay(job.salary_min, job.salary_max),
+      description: stripHtml(job.description || ""),
+      remote: true,
+      rawType: (job.tags || []).join(", ") || "remote",
+      postedAt: job.date || ""
+    }));
+}
+
+function enrichDiscoveredJob(job, targetLocation) {
+  const text = `${job.title} ${job.company} ${job.location} ${job.rawType} ${job.description}`.toLowerCase();
+  const lane = inferLane(text);
+  const employmentType = inferEmploymentType(text);
+  const schedule = inferSchedule(text, job.remote);
+  const scores = inferScores(text, lane, employmentType, schedule, job.remote);
+  const bridgeScore = calculateScore(scores);
+  const decision = getDecisionLabel(bridgeScore);
+
+  return {
+    ...job,
+    lane,
+    employmentType,
+    schedule,
+    scores,
+    bridgeScore,
+    decision,
+    targetLocation
+  };
+}
+
+function inferLane(text) {
+  if (/underwriting|claims?\s+system|policy\s+system|broker\s+workflow|submission|guidewire|duck creek|insurtech|insurance\s+(systems?|software|application|platform)/.test(text)) return "Insurtech / Insurance Systems";
+  if (/automation|python|csv|dashboard|internal tool|workflow|process improvement|business systems|systems analyst|implementation/.test(text)) return "Automation / Systems";
+  if (/data center|datacenter|rack|stack|server hardware|noc|network operations|remote hands|infrastructure/.test(text)) return "Data Center / Infrastructure";
+  if (/cctv|low voltage|structured cabling|field technician|access control|av technician|site survey/.test(text)) return "Field Tech / Low Voltage";
+  if (/desktop|endpoint|imaging|printer|active directory|hardware refresh/.test(text)) return "Desktop Support";
+  if (/freelance|small business|contractor|consultant/.test(text)) return "Freelance / Small Business Tech";
+  return "IT Support";
+}
+
+function inferEmploymentType(text) {
+  if (/part[\s-]?time|weekend|evening/.test(text)) return "part-time";
+  if (/contract|contractor|temporary|temp/.test(text)) return "contract";
+  if (/freelance|consultant/.test(text)) return "freelance";
+  return "full-time future target";
+}
+
+function inferSchedule(text, remote) {
+  if (/weekend/.test(text)) return "weekend";
+  if (/evening|night|after hours|after-hours/.test(text)) return "evening";
+  if (/flexible|remote|hybrid|async/.test(text) || remote) return "flexible";
+  if (/monday|friday|weekday|9-5|full-time|full time/.test(text)) return "weekday";
+  return "unknown";
+}
+
+function inferScores(text, lane, employmentType, schedule, remote) {
+  const techTerms = countMatches(text, [
+    "python",
+    "ticket",
+    "windows",
+    "macos",
+    "microsoft 365",
+    "active directory",
+    "server",
+    "network",
+    "automation",
+    "dashboard",
+    "api",
+    "sql",
+    "hardware",
+    "workflow",
+    "requirements",
+    "uat",
+    "implementation"
+  ]);
+  const domainBoost = /insurance|underwriting|claims|policy|broker/.test(text) ? 2 : 0;
+  const flexibleBoost = employmentType !== "full-time future target" || schedule === "flexible" || remote ? 2 : 0;
+  const cashBoost = /\$\d|salary|hour|competitive|contract/.test(text) ? 1 : 0;
+  const stressPenalty = countMatches(text, ["senior", "lead", "manager", "on-call", "on call", "fast-paced", "urgent", "24/7"]);
+
+  return {
+    cash_score: clampNumber(5 + cashBoost + (employmentType === "contract" ? 1 : 0), 0, 10, 5),
+    schedule_fit: clampNumber(4 + flexibleBoost + (schedule === "weekend" || schedule === "evening" ? 2 : 0), 0, 10, 5),
+    tech_exposure: clampNumber(5 + Math.min(techTerms, 4), 0, 10, 5),
+    people_fit: clampNumber(6 + domainBoost, 0, 10, 6),
+    exit_value: clampNumber(lane === "Insurtech / Insurance Systems" ? 9 : lane === "Automation / Systems" ? 8 : lane === "Data Center / Infrastructure" ? 7 : 6, 0, 10, 7),
+    stress_cost: clampNumber(4 + stressPenalty - (employmentType === "part-time" || schedule === "flexible" ? 1 : 0), 0, 10, 4)
+  };
+}
+
+function renderFinderResults() {
+  const minScore = Number($("#finderMinScoreInput").value);
+  const flexibleOnly = $("#finderFlexibleOnlyInput").checked;
+  const visible = finderResults
+    .filter((job) => job.bridgeScore >= minScore)
+    .filter((job) => !flexibleOnly || isFlexibleFinderMatch(job))
+    .slice(0, 80);
+
+  $("#finderCountHeading").textContent = finderHasRun ? `${visible.length} Suggested Roles` : "No search run yet";
+
+  if (!visible.length) {
+    $("#finderResults").innerHTML = emptyState(finderHasRun ? "No API roles matched the bridge-role filters right now. Use the generated search links below for local boards, or try another search pack." : "Run Auto Finder to pull roles from public job APIs and score them.");
+    return;
+  }
+
+  $("#finderResults").innerHTML = visible.map((job) => `
+    <article class="finder-card">
+      <div class="card-header">
+        <div>
+          <p class="eyebrow">${escapeHtml(job.source)}</p>
+          <h3>${escapeHtml(job.title)}</h3>
+          <p class="company-line">${escapeHtml(job.company)} - ${escapeHtml(job.location)}</p>
+        </div>
+        <span class="score-badge">${Math.round(job.bridgeScore)}</span>
+      </div>
+      <div class="badge-row">
+        <span class="label-badge ${job.decision.className}">${escapeHtml(job.decision.text)}</span>
+        <span class="badge">${escapeHtml(job.lane)}</span>
+        <span class="badge">${escapeHtml(job.employmentType)}</span>
+        <span class="badge">${escapeHtml(job.schedule)}</span>
+      </div>
+      <p class="meta-line">${escapeHtml(job.payRange || "Pay unknown")} - ${escapeHtml(job.remote ? "Remote feed" : "Location listed")}</p>
+      <p class="note-preview">${escapeHtml(truncateText(job.description, 240))}</p>
+      <div class="finder-actions">
+        <button class="secondary-button" type="button" data-save-found-id="${escapeAttribute(job.sourceId)}">Save to Tracker</button>
+        <a class="secondary-button" href="${escapeAttribute(job.url)}" target="_blank" rel="noreferrer">Open Posting</a>
+      </div>
+    </article>
+  `).join("");
+
+  $$("[data-save-found-id]").forEach((button) => {
+    button.addEventListener("click", () => saveDiscoveredJob(button.dataset.saveFoundId));
+  });
+}
+
+function renderSourceStatus(statuses = []) {
+  $("#sourceStatus").innerHTML = statuses.map((status) => `
+    <div class="source-pill">
+      <strong>${escapeHtml(status.name)}</strong>
+      <span>${escapeHtml(status.message)}</span>
+    </div>
+  `).join("");
+}
+
+function renderSearchLinks() {
+  const pack = $("#finderPackSelect")?.value || "bridge";
+  const location = $("#finderLocationInput")?.value.trim() || "Bay Area OR remote";
+  const queries = (FINDER_PACKS[pack] || FINDER_PACKS.bridge).slice(0, 6);
+  const links = queries.flatMap((query) => SEARCH_LINK_SOURCES.map((source) => ({ source, query })));
+
+  const grid = $("#searchLinkGrid");
+  if (!grid) return;
+
+  grid.innerHTML = links.map(({ source, query }) => `
+    <a class="search-link" href="${escapeAttribute(source.buildUrl(query, location))}" target="_blank" rel="noreferrer">
+      ${escapeHtml(source.name)}
+      <span>${escapeHtml(query)} - ${escapeHtml(location)}</span>
+    </a>
+  `).join("");
+}
+
+function saveDiscoveredJob(sourceId) {
+  const found = finderResults.find((job) => job.sourceId === sourceId);
+  if (!found) return;
+
+  const alreadySaved = jobs.some((job) => job.applyUrl && found.url && job.applyUrl === found.url);
+  if (alreadySaved) {
+    showToast("That posting is already in your tracker.");
+    return;
+  }
+
+  const now = new Date().toISOString();
+  const saved = normalizeJob({
+    id: createId(),
+    title: found.title,
+    company: found.company,
+    location: found.location,
+    applyUrl: found.url,
+    employmentType: found.employmentType,
+    schedule: found.schedule,
+    payRange: found.payRange || "",
+    commuteEstimate: found.remote ? "Remote" : "Verify commute",
+    lane: found.lane,
+    status: "Researching",
+    scores: found.scores,
+    notes: {
+      fit: `Auto-found from ${found.source}. Predicted lane: ${found.lane}. Validate schedule, pay, and actual tech exposure before applying.`,
+      learn: "Confirm tools, ticket volume, training, escalation path, and whether the schedule protects the full-time job.",
+      keywords: (KEYWORDS[found.lane] || []).join(", "),
+      questions: "Is the schedule fixed? What systems and tools will I touch? How many hours per week? Who handles escalation?",
+      redFlags: "Watch for vague schedule, unpaid availability, high on-call expectations, or low technical depth."
+    },
+    createdAt: now,
+    updatedAt: now
+  });
+
+  jobs = [saved, ...jobs];
+  saveJobs();
+  renderAll();
+  showToast("Saved discovered role to tracker.");
+}
+
+function clearFinderResults() {
+  finderResults = [];
+  finderHasRun = false;
+  $("#sourceStatus").innerHTML = "";
+  renderFinderResults();
+}
+
+function isFlexibleFinderMatch(job) {
+  const text = `${job.title} ${job.location} ${job.rawType} ${job.description}`.toLowerCase();
+  return job.remote || job.employmentType !== "full-time future target" || /remote|hybrid|part[\s-]?time|contract|flexible|weekend|evening/.test(text);
+}
+
+function dedupeDiscoveredJobs(items) {
+  const seen = new Set();
+  return items.filter((item) => {
+    const key = (item.url || `${item.title}-${item.company}`).toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return item.title && item.company && item.url;
+  });
+}
+
+function isTargetBridgeRole(job) {
+  const title = String(job.title || "").toLowerCase();
+  const text = `${title} ${job.description || ""}`.toLowerCase();
+  const targetTitle = /(help desk|it support|desktop support|technical support|product support|application support|endpoint support|support specialist|support analyst|support technician|support engineer|customer support engineer|technical customer support|systems analyst|business systems analyst|business analyst|implementation specialist|implementation consultant|data center|datacenter|noc technician|network operations|field technician|low voltage|cctv|remote hands|workflow automation|automation analyst|claims analyst|application analyst|underwriting systems|insurance systems|policy systems)/i;
+  const targetBody = /(ticketing|user support|endpoint troubleshooting|microsoft 365|active directory|desktop imaging|rack and stack|remote hands|workflow automation|business requirements|user acceptance testing|claims systems|policy systems|underwriting operations)/i;
+  const badTitle = /(head of|vp|director|senior software|staff software|software engineer|full.stack|frontend|backend|developer|sales|account executive|marketing|copywriter|designer|recruit|brand manager|physician|nurse|cinematic|video editor)/i;
+
+  if (targetTitle.test(title)) return true;
+  if (badTitle.test(title)) return false;
+  return targetBody.test(text) && /(support|analyst|technician|specialist|implementation|automation|systems)/i.test(title);
+}
+
+function isLocationCompatible(job) {
+  const location = String(job.location || "").toLowerCase();
+  const text = `${job.title || ""} ${job.company || ""} ${location} ${job.description || ""}`.toLowerCase();
+  const locationPositive = /(worldwide|usa|u\.s\.|united states|americas|north america|california|san francisco|bay area|oakland|walnut creek|cupertino|south san francisco|san jose|san mateo|dublin)/;
+  const regionNegative = /(germany|deutschland|berlin|munich|augsburg|brazil|latam|europe only|europe,|israel|india|australia only|m\/w\/d|gmbh)/;
+
+  if (regionNegative.test(text) && !/(usa|u\.s\.|united states|north america|americas|worldwide)/.test(location)) return false;
+  if (locationPositive.test(text)) return true;
+  if (job.source === "Remotive" && job.remote) return true;
+  return Boolean(job.remote && locationPositive.test(location));
+}
+
+function countMatches(text, terms) {
+  return terms.reduce((count, term) => count + (text.includes(term) ? 1 : 0), 0);
+}
+
+function stripHtml(value) {
+  const element = document.createElement("div");
+  element.innerHTML = value;
+  return element.textContent || element.innerText || "";
+}
+
+function truncateText(value, maxLength) {
+  const text = String(value || "").replace(/\s+/g, " ").trim();
+  if (text.length <= maxLength) return text;
+  return `${text.slice(0, maxLength - 3)}...`;
 }
 
 function getFilteredJobs() {
@@ -935,6 +1398,15 @@ function parsePayValue(payRange) {
   if (!numbers.length) return 0;
   const avg = average(numbers);
   return /k/i.test(payRange) ? avg * 1000 : avg;
+}
+
+function formatRemoteOkPay(min, max) {
+  const low = Number(min);
+  const high = Number(max);
+  if (low && high) return `$${low.toLocaleString()}-$${high.toLocaleString()}`;
+  if (low) return `$${low.toLocaleString()}+`;
+  if (high) return `Up to $${high.toLocaleString()}`;
+  return "";
 }
 
 function average(values) {
