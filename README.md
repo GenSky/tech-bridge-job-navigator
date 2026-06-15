@@ -62,7 +62,7 @@ http://localhost:8000
    - `job-search-queries.md`
 3. In GitHub, open `Settings > Pages`.
 4. Set source to `Deploy from a branch`.
-5. Choose the `main` branch and `/root`.
+5. Choose the `main` branch and the `/ (root)` folder.
 6. Save. GitHub Pages will publish the app after the first deployment finishes.
 
 ## Customize Scoring Weights

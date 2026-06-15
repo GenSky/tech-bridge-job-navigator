@@ -6,7 +6,7 @@
     <meta name="description" content="A decision dashboard for comparing part-time and flexible tech bridge roles while keeping a full-time job.">
     <title>Tech Bridge Job Navigator</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="styles.css?v=20260615-4">
+    <link rel="stylesheet" href="styles.css?v=20260615-5">
   </head>
   <body>
     <div class="app-shell">
@@ -17,21 +17,21 @@
           <p class="lead">Score, compare, and track bridge roles without turning job research into doom-scrolling.</p>
         </div>
         <div class="topbar-actions">
-          <button class="icon-button" id="themeToggle" type="button" aria-label="Toggle dark mode" title="Toggle dark mode">DM</button>
+          <button class="icon-button" id="themeToggle" type="button" aria-label="Toggle light/dark theme" aria-pressed="false" title="Toggle light/dark theme">DM</button>
           <button class="primary-button" id="newJobButton" type="button">Add Job</button>
         </div>
       </header>
 
-      <nav class="tabs" aria-label="Primary">
-        <button class="tab-button active" type="button" data-tab="dashboard">Dashboard</button>
-        <button class="tab-button" type="button" data-tab="finder">Auto Finder</button>
-        <button class="tab-button" type="button" data-tab="tracker">Job Tracker</button>
-        <button class="tab-button" type="button" data-tab="keywords">Resume Keywords</button>
-        <button class="tab-button" type="button" data-tab="strategy">Career Strategy</button>
+      <nav class="tabs" aria-label="Primary" role="tablist">
+        <button class="tab-button active" type="button" role="tab" id="dashboard-tab" data-tab="dashboard" aria-controls="dashboard" aria-selected="true">Dashboard</button>
+        <button class="tab-button" type="button" role="tab" id="finder-tab" data-tab="finder" aria-controls="finder" aria-selected="false" tabindex="-1">Auto Finder</button>
+        <button class="tab-button" type="button" role="tab" id="tracker-tab" data-tab="tracker" aria-controls="tracker" aria-selected="false" tabindex="-1">Job Tracker</button>
+        <button class="tab-button" type="button" role="tab" id="keywords-tab" data-tab="keywords" aria-controls="keywords" aria-selected="false" tabindex="-1">Resume Keywords</button>
+        <button class="tab-button" type="button" role="tab" id="strategy-tab" data-tab="strategy" aria-controls="strategy" aria-selected="false" tabindex="-1">Career Strategy</button>
       </nav>
 
       <main>
-        <section class="tab-panel active" id="dashboard" aria-labelledby="dashboard-tab">
+        <section class="tab-panel active" id="dashboard" role="tabpanel" aria-labelledby="dashboard-tab" tabindex="0">
           <div class="metric-grid" id="metricGrid"></div>
 
           <div class="section-grid">
@@ -107,7 +107,7 @@
           </div>
         </section>
 
-        <section class="tab-panel" id="finder">
+        <section class="tab-panel" id="finder" role="tabpanel" aria-labelledby="finder-tab" tabindex="0">
           <div class="finder-layout">
             <aside class="panel filters-panel">
               <div class="panel-header">
@@ -119,7 +119,7 @@
               <div class="control-stack">
                 <label>
                   Target location
-                  <input id="finderLocationInput" value="94523 Bay Area remote" placeholder="94523 Bay Area remote">
+                  <input id="finderLocationInput" value="" placeholder="ZIP, city, or 'remote'">
                 </label>
                 <label>
                   Search pack
@@ -174,7 +174,7 @@
           </div>
         </section>
 
-        <section class="tab-panel" id="tracker">
+        <section class="tab-panel" id="tracker" role="tabpanel" aria-labelledby="tracker-tab" tabindex="0">
           <div class="tracker-layout">
             <aside class="panel filters-panel">
               <div class="panel-header">
@@ -253,7 +253,7 @@
           </div>
         </section>
 
-        <section class="tab-panel" id="keywords">
+        <section class="tab-panel" id="keywords" role="tabpanel" aria-labelledby="keywords-tab" tabindex="0">
           <div class="page-heading">
             <p class="eyebrow">Resume signal builder</p>
             <h2>Lane Keywords</h2>
@@ -262,11 +262,11 @@
           <div class="keyword-grid" id="keywordGrid"></div>
         </section>
 
-        <section class="tab-panel" id="strategy">
+        <section class="tab-panel" id="strategy" role="tabpanel" aria-labelledby="strategy-tab" tabindex="0">
           <div class="strategy-grid">
             <section class="panel wide">
               <p class="eyebrow">Operating principle</p>
-              <h2>Keep the $80K Full-Time Job as Runway</h2>
+              <h2>Keep the Full-Time Job as Runway</h2>
               <p>The full-time job is the funding engine. Bridge roles should add cash, tech exposure, proof, and network without burning down family time or the current income base.</p>
               <div class="principle-grid">
                 <article>
@@ -291,7 +291,7 @@
                 <li><span>Part-time IT Support</span><strong>Fastest credible tech proof while keeping income stable.</strong></li>
                 <li><span>Data Center / Infrastructure</span><strong>Good fit for homelab, server hardware, cabling, and uptime mindset.</strong></li>
                 <li><span>Automation / Systems</span><strong>Uses Python, Flask, dashboards, CSV processing, and workflow automation.</strong></li>
-                <li><span>Insurtech / Insurance Systems</span><strong>Combines 15+ years insurance operations with technical systems work.</strong></li>
+                <li><span>Insurtech / Insurance Systems</span><strong>Combines deep insurance operations experience with technical systems work.</strong></li>
                 <li><span>Freelance Small Business Automation</span><strong>Useful side proof if scoped tightly and protected from time creep.</strong></li>
               </ol>
             </section>
@@ -419,6 +419,6 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-    <script src="app.js?v=20260615-4"></script>
+    <script src="app.js?v=20260615-5"></script>
   </body>
 </html>
