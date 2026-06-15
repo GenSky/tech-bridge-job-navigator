@@ -817,7 +817,7 @@ function enrichDiscoveredJob(job, targetLocation) {
   const bridgeScore = calculateScore(scores);
   const decision = getDecisionLabel(bridgeScore);
   const directBridgeMatch = isTargetBridgeRole(job);
-  const locationMatch = isLocationCompatible(job);
+  const locationMatch = isLocationCompatible(job, targetLocation);
   const badFit = isBadFinderFit(text);
   const relevanceScore = scoreDiscoveryRelevance(text, directBridgeMatch, locationMatch);
 
@@ -902,17 +902,21 @@ function renderFinderResults() {
     .filter((job) => job.bridgeScore >= minScore)
     .filter((job) => !flexibleOnly || isFlexibleFinderMatch(job));
   const focusedCandidates = candidates.filter((job) => job.matchQuality !== "Broad API candidate");
-  const visible = (focusedCandidates.length ? focusedCandidates : candidates)
+  const fallbackCandidates = finderResults.slice(0, 40);
+  const visible = (focusedCandidates.length ? focusedCandidates : candidates.length ? candidates : fallbackCandidates)
     .slice(0, 80);
+  const usingFallback = finderHasRun && !candidates.length && fallbackCandidates.length > 0;
 
   $("#finderCountHeading").textContent = finderHasRun ? `${visible.length} Suggested Roles` : "No search run yet";
 
   if (!visible.length) {
-    $("#finderResults").innerHTML = emptyState(finderHasRun ? "No API roles matched the bridge-role filters right now. Use the generated search links below for local boards, or try another search pack." : "Run Auto Finder to pull roles from public job APIs and score them.");
+    $("#finderResults").innerHTML = emptyState(finderHasRun ? "No API records came back from the public sources. Use the generated zip/local search links below." : "Run Auto Finder to pull roles from public job APIs and score them.");
     return;
   }
 
-  $("#finderResults").innerHTML = visible.map((job) => `
+  const fallbackNotice = usingFallback ? `<p class="empty-state">Your score/flexible filters hid every API candidate, so this is showing the best broad API results instead. Lower the filters or save only roles that actually fit.</p>` : "";
+
+  $("#finderResults").innerHTML = fallbackNotice + visible.map((job) => `
     <article class="finder-card">
       <div class="card-header">
         <div>
@@ -1068,13 +1072,19 @@ function isBadFinderFit(text) {
   return /sales|account executive|account payable|marketing|copywriter|writer|recruit|brand manager|designer|software engineer|full.stack|frontend|backend|developer|video editor|office assistant|administrative assistant|learning & development|product manager|social media|template|head of|director|vp/.test(text);
 }
 
-function isLocationCompatible(job) {
+function isLocationCompatible(job, targetLocation = "") {
   const location = String(job.location || "").toLowerCase();
+  const target = String(targetLocation || "").toLowerCase();
   const text = `${job.title || ""} ${job.company || ""} ${location} ${job.description || ""}`.toLowerCase();
+  const wantsBayArea = /(94523|bay area|walnut creek|concord|pleasant hill|dublin|oakland|san francisco|san jose|san mateo|cupertino|south san francisco|california|ca\b)/.test(target);
+  const wantsRemote = /remote|hybrid|flex/.test(target);
   const locationPositive = /(remote|worldwide|usa|u\.s\.|united states|americas|north america|california|san francisco|bay area|oakland|walnut creek|cupertino|south san francisco|san jose|san mateo|dublin)/;
+  const bayAreaPositive = /(california|ca\b|san francisco|bay area|oakland|walnut creek|concord|pleasant hill|cupertino|south san francisco|san jose|san mateo|dublin)/;
   const regionNegative = /(canada|germany|deutschland|berlin|munich|augsburg|brazil|latam|europe only|europe,|israel|india|australia only|peru|lima|m\/w\/d|gmbh)/;
 
   if (regionNegative.test(text) && !/(usa|u\.s\.|united states|north america|americas|worldwide)/.test(location)) return false;
+  if (wantsBayArea && bayAreaPositive.test(location)) return true;
+  if (wantsRemote && /(remote|worldwide|usa|u\.s\.|united states|americas|north america)/.test(location)) return true;
   if (locationPositive.test(location)) return true;
   if (job.source === "Remotive" && job.remote) return /(worldwide|usa|u\.s\.|united states|americas|north america|remote)/.test(location);
   return Boolean(job.remote && locationPositive.test(location));

@@ -6,7 +6,7 @@
     <meta name="description" content="A decision dashboard for comparing part-time and flexible tech bridge roles while keeping a full-time job.">
     <title>Tech Bridge Job Navigator</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=20260615-3">
   </head>
   <body>
     <div class="app-shell">
@@ -119,7 +119,7 @@
               <div class="control-stack">
                 <label>
                   Target location
-                  <input id="finderLocationInput" value="Bay Area OR remote" placeholder="Bay Area OR remote">
+                  <input id="finderLocationInput" value="94523 Bay Area remote" placeholder="94523 Bay Area remote">
                 </label>
                 <label>
                   Search pack
@@ -133,8 +133,8 @@
                 </label>
                 <label>
                   Minimum predicted score
-                  <input id="finderMinScoreInput" type="range" min="0" max="80" value="35">
-                  <span class="range-readout" id="finderMinScoreReadout">35</span>
+                  <input id="finderMinScoreInput" type="range" min="0" max="80" value="15">
+                  <span class="range-readout" id="finderMinScoreReadout">15</span>
                 </label>
                 <label class="checkbox-label">
                   <input id="finderFlexibleOnlyInput" type="checkbox" checked>
@@ -419,6 +419,6 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=20260615-3"></script>
   </body>
 </html>
