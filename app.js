@@ -384,8 +384,20 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 function bindEvents() {
-  $$(".tab-button").forEach((button) => {
+  const tabButtons = $$(".tab-button");
+  tabButtons.forEach((button, index) => {
     button.addEventListener("click", () => switchTab(button.dataset.tab));
+    button.addEventListener("keydown", (event) => {
+      const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+      let target = null;
+      if (step) target = tabButtons[(index + step + tabButtons.length) % tabButtons.length];
+      else if (event.key === "Home") target = tabButtons[0];
+      else if (event.key === "End") target = tabButtons[tabButtons.length - 1];
+      if (!target) return;
+      event.preventDefault();
+      switchTab(target.dataset.tab);
+      target.focus();
+    });
   });
 
   $("#themeToggle").addEventListener("click", toggleTheme);
@@ -478,6 +490,7 @@ function withIds(items) {
 }
 
 function normalizeJob(job) {
+  if (!job || typeof job !== "object") job = {};
   const scores = job.scores || {};
   const notes = job.notes || {};
   return {
@@ -485,7 +498,7 @@ function normalizeJob(job) {
     title: job.title || "",
     company: job.company || "",
     location: job.location || "",
-    applyUrl: job.applyUrl || job.url || "",
+    applyUrl: safeUrl(job.applyUrl || job.url),
     employmentType: job.employmentType || "part-time",
     schedule: job.schedule || "unknown",
     payRange: job.payRange || "",
@@ -506,7 +519,14 @@ function normalizeJob(job) {
 }
 
 function saveJobs(nextJobs = jobs) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(nextJobs, null, 2));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(nextJobs));
+    return true;
+  } catch (error) {
+    console.error(error);
+    showToast("Could not save: browser storage is full or unavailable.");
+    return false;
+  }
 }
 
 function renderAll() {
@@ -538,7 +558,7 @@ function renderDashboard() {
   renderCompactList("#followUpRoles", scored.filter((job) => ["Interesting", "Applied", "Interview"].includes(job.status)).slice(0, 5));
   renderLaneChart(scored);
 
-  if (topJob) document.title = `${Math.round(topJob.bridgeScore)} - Tech Bridge Job Navigator`;
+  document.title = topJob ? `${Math.round(topJob.bridgeScore)} - Tech Bridge Job Navigator` : "Tech Bridge Job Navigator";
 }
 
 function metricCard(label, value) {
@@ -620,8 +640,9 @@ function renderJobList() {
 
   list.innerHTML = filtered.map((job) => {
     const label = getDecisionLabel(job.bridgeScore);
-    const urlButton = job.applyUrl
-      ? `<a class="secondary-button" href="${escapeAttribute(job.applyUrl)}" target="_blank" rel="noreferrer">Open URL</a>`
+    const safeApplyUrl = safeUrl(job.applyUrl);
+    const urlButton = safeApplyUrl
+      ? `<a class="secondary-button" href="${escapeAttribute(safeApplyUrl)}" target="_blank" rel="noreferrer">Open URL</a>`
       : "";
 
     return `
@@ -694,6 +715,7 @@ async function runAutoFinder() {
   const discovered = [];
   finderHasRun = true;
 
+  try {
   const remotiveSettled = await Promise.allSettled(queries.map((query) => fetchRemotive(query)));
   const remotiveJobs = remotiveSettled.flatMap((result) => result.status === "fulfilled" ? result.value : []);
   const remotiveFailures = remotiveSettled.filter((result) => result.status === "rejected").length;
@@ -729,13 +751,14 @@ async function runAutoFinder() {
   renderFinderResults();
   renderSearchLinks();
   showToast(`Auto Finder found ${finderResults.length} possible roles.`);
-
-  button.disabled = false;
-  button.textContent = "Find Jobs";
+  } finally {
+    button.disabled = false;
+    button.textContent = "Find Jobs";
+  }
 }
 
 async function fetchRemotive(query) {
-  const response = await fetch(`https://remotive.com/api/remote-jobs?search=${encodeURIComponent(query)}`);
+  const response = await fetch(`https://remotive.com/api/remote-jobs?search=${encodeURIComponent(query)}`, { signal: AbortSignal.timeout(12000) });
   if (!response.ok) throw new Error(`Remotive failed: ${response.status}`);
   const payload = await response.json();
   return (payload.jobs || []).map((job) => ({
@@ -754,7 +777,7 @@ async function fetchRemotive(query) {
 }
 
 async function fetchArbeitnow(queries) {
-  const response = await fetch("https://www.arbeitnow.com/api/job-board-api");
+  const response = await fetch("https://www.arbeitnow.com/api/job-board-api", { signal: AbortSignal.timeout(12000) });
   if (!response.ok) throw new Error(`Arbeitnow failed: ${response.status}`);
   const payload = await response.json();
   const needles = queries.flatMap((query) => query.toLowerCase().split(/\s+/)).filter((word) => word.length > 3);
@@ -781,7 +804,7 @@ async function fetchArbeitnow(queries) {
 }
 
 async function fetchRemoteOk(queries) {
-  const response = await fetch("https://remoteok.com/api");
+  const response = await fetch("https://remoteok.com/api", { signal: AbortSignal.timeout(12000) });
   if (!response.ok) throw new Error(`RemoteOK failed: ${response.status}`);
   const payload = await response.json();
   const needles = queries.map((query) => query.toLowerCase());
@@ -940,7 +963,7 @@ function renderFinderResults() {
       <p class="note-preview">${escapeHtml(truncateText(job.description, 240))}</p>
       <div class="finder-actions">
         <button class="secondary-button" type="button" data-save-found-id="${escapeAttribute(job.sourceId)}">Save to Tracker</button>
-        <a class="secondary-button" href="${escapeAttribute(job.url)}" target="_blank" rel="noreferrer">Open Posting</a>
+        ${safeUrl(job.url) ? `<a class="secondary-button" href="${escapeAttribute(safeUrl(job.url))}" target="_blank" rel="noreferrer">Open Posting</a>` : ""}
       </div>
     </article>
   `).join("");
@@ -1032,10 +1055,11 @@ function isFlexibleFinderMatch(job) {
 function dedupeDiscoveredJobs(items) {
   const seen = new Set();
   return items.filter((item) => {
+    if (!(item.title && item.company && item.url)) return false;
     const key = (item.url || `${item.title}-${item.company}`).toLowerCase();
     if (seen.has(key)) return false;
     seen.add(key);
-    return item.title && item.company && item.url;
+    return true;
   });
 }
 
@@ -1082,7 +1106,7 @@ function isOutsideTargetRegion(job, targetLocation = "") {
   const text = `${job.title || ""} ${job.company || ""} ${location} ${job.description || ""}`.toLowerCase();
   const wantsUsOrBayArea = /(94523|bay area|walnut creek|concord|pleasant hill|dublin|oakland|san francisco|san jose|san mateo|cupertino|south san francisco|california|ca\b|remote|usa|u\.s\.|united states)/.test(target);
   const explicitlyCompatible = /(remote\b|worldwide|usa|u\.s\.|united states|north america|americas|california|ca\b|san francisco|bay area|oakland|walnut creek|concord|pleasant hill|cupertino|south san francisco|san jose|san mateo|dublin)/.test(location);
-  const outsideRegion = /(germany|deutschland|berlin|munich|augsburg|gmbh|m\/w\/d|peru|lima|brazil|latam|europe only|europe,|israel|india|australia only|canada only|canada)/.test(text);
+  const outsideRegion = /(germany|deutschland|berlin|munich|augsburg|gmbh|m\/w\/d|peru|lima|brazil|latam|europe only|europe,|israel|india|australia only|canada only)/.test(text);
 
   return wantsUsOrBayArea && outsideRegion && !explicitlyCompatible;
 }
@@ -1095,7 +1119,7 @@ function isLocationCompatible(job, targetLocation = "") {
   const wantsRemote = /remote|hybrid|flex/.test(target);
   const locationPositive = /(remote|worldwide|usa|u\.s\.|united states|americas|north america|california|san francisco|bay area|oakland|walnut creek|cupertino|south san francisco|san jose|san mateo|dublin)/;
   const bayAreaPositive = /(california|ca\b|san francisco|bay area|oakland|walnut creek|concord|pleasant hill|cupertino|south san francisco|san jose|san mateo|dublin)/;
-  const regionNegative = /(canada|germany|deutschland|berlin|munich|augsburg|brazil|latam|europe only|europe,|israel|india|australia only|peru|lima|m\/w\/d|gmbh)/;
+  const regionNegative = /(canada only|germany|deutschland|berlin|munich|augsburg|brazil|latam|europe only|europe,|israel|india|australia only|peru|lima|m\/w\/d|gmbh)/;
 
   if (regionNegative.test(text) && !/(usa|u\.s\.|united states|north america|americas|worldwide)/.test(location)) return false;
   if (wantsBayArea && bayAreaPositive.test(location)) return true;
@@ -1373,7 +1397,7 @@ function exportCsv() {
     job.notes.redFlags
   ]);
 
-  const csv = [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
+  const csv = [headers, ...rows].map((row) => row.map(csvCell).join(",")).join("\r\n");
   downloadFile("tech-bridge-jobs.csv", csv, "text/csv");
   showToast("CSV export prepared.");
 }
@@ -1397,7 +1421,9 @@ function importJobsFromJson(raw) {
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) throw new Error("Import must be a JSON array.");
-    jobs = parsed.map(normalizeJob);
+    if (jobs.length && !window.confirm(`Replace your current ${jobs.length} saved job(s) with ${parsed.length} imported job(s)? This cannot be undone.`)) return;
+    // Re-key every imported job so duplicate/colliding ids can't corrupt edit/delete.
+    jobs = parsed.map((item) => normalizeJob({ ...item, id: createId() }));
     saveJobs();
     renderAll();
     $("#importTextArea").value = "";
@@ -1422,19 +1448,35 @@ function downloadFile(filename, content, mimeType) {
 
 function switchTab(tabName) {
   activeTab = tabName;
-  $$(".tab-button").forEach((button) => button.classList.toggle("active", button.dataset.tab === tabName));
+  $$(".tab-button").forEach((button) => {
+    const selected = button.dataset.tab === tabName;
+    button.classList.toggle("active", selected);
+    button.setAttribute("aria-selected", selected ? "true" : "false");
+    button.tabIndex = selected ? 0 : -1;
+  });
   $$(".tab-panel").forEach((panel) => panel.classList.toggle("active", panel.id === tabName));
 }
 
 function toggleTheme() {
   document.body.classList.toggle("light");
-  const theme = document.body.classList.contains("light") ? "light" : "dark";
-  localStorage.setItem(THEME_KEY, theme);
+  const isLight = document.body.classList.contains("light");
+  try {
+    localStorage.setItem(THEME_KEY, isLight ? "light" : "dark");
+  } catch (error) {
+    console.error(error);
+  }
+  syncThemeToggle(isLight);
 }
 
 function applySavedTheme() {
   const theme = localStorage.getItem(THEME_KEY);
   if (theme === "light") document.body.classList.add("light");
+  syncThemeToggle(document.body.classList.contains("light"));
+}
+
+function syncThemeToggle(isLight) {
+  const toggle = $("#themeToggle");
+  if (toggle) toggle.setAttribute("aria-pressed", isLight ? "true" : "false");
 }
 
 function getTopLane(scored) {
@@ -1453,7 +1495,10 @@ function parsePayValue(payRange) {
   const numbers = payRange.match(/\d+(?:\.\d+)?/g)?.map(Number) || [];
   if (!numbers.length) return 0;
   const avg = average(numbers);
-  return /k/i.test(payRange) ? avg * 1000 : avg;
+  // Normalize to annual dollars so hourly and salaried roles sort on one scale.
+  if (/(\/\s*hr|\bhr\b|per\s*hour|hourly|hour)/i.test(payRange)) return avg * 2080;
+  if (/\d+\s*k\b/i.test(payRange)) return avg * 1000;
+  return avg;
 }
 
 function formatRemoteOkPay(min, max) {
@@ -1482,7 +1527,9 @@ function createId() {
 }
 
 function csvCell(value) {
-  const text = String(value ?? "");
+  let text = String(value ?? "");
+  // Neutralize spreadsheet formula injection (=, +, -, @, tab, CR triggers).
+  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
   return `"${text.replace(/"/g, '""')}"`;
 }
 
@@ -1509,4 +1556,15 @@ function escapeHtml(value) {
 
 function escapeAttribute(value) {
   return escapeHtml(value).replace(/`/g, "&#096;");
+}
+
+function safeUrl(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw, window.location.href);
+    return (url.protocol === "http:" || url.protocol === "https:") ? url.href : "";
+  } catch {
+    return "";
+  }
 }
