@@ -818,6 +818,7 @@ function enrichDiscoveredJob(job, targetLocation) {
   const decision = getDecisionLabel(bridgeScore);
   const directBridgeMatch = isTargetBridgeRole(job);
   const locationMatch = isLocationCompatible(job, targetLocation);
+  const outsideTargetRegion = isOutsideTargetRegion(job, targetLocation);
   const badFit = isBadFinderFit(text);
   const relevanceScore = scoreDiscoveryRelevance(text, directBridgeMatch, locationMatch);
 
@@ -828,8 +829,9 @@ function enrichDiscoveredJob(job, targetLocation) {
     schedule,
     scores,
     bridgeScore,
-    matchScore: bridgeScore + relevanceScore,
-    matchQuality: getMatchQuality(directBridgeMatch, locationMatch, badFit),
+    matchScore: bridgeScore + relevanceScore - (outsideTargetRegion ? 200 : 0),
+    matchQuality: getMatchQuality(directBridgeMatch, locationMatch, badFit, outsideTargetRegion),
+    outsideTargetRegion,
     decision,
     targetLocation
   };
@@ -898,11 +900,12 @@ function inferScores(text, lane, employmentType, schedule, remote) {
 function renderFinderResults() {
   const minScore = Number($("#finderMinScoreInput").value);
   const flexibleOnly = $("#finderFlexibleOnlyInput").checked;
-  const candidates = finderResults
+  const regionSafeResults = finderResults.filter((job) => !job.outsideTargetRegion);
+  const candidates = regionSafeResults
     .filter((job) => job.bridgeScore >= minScore)
     .filter((job) => !flexibleOnly || isFlexibleFinderMatch(job));
   const focusedCandidates = candidates.filter((job) => job.matchQuality !== "Broad API candidate");
-  const fallbackCandidates = finderResults.slice(0, 40);
+  const fallbackCandidates = regionSafeResults.slice(0, 40);
   const visible = (focusedCandidates.length ? focusedCandidates : candidates.length ? candidates : fallbackCandidates)
     .slice(0, 80);
   const usingFallback = finderHasRun && !candidates.length && fallbackCandidates.length > 0;
@@ -910,11 +913,11 @@ function renderFinderResults() {
   $("#finderCountHeading").textContent = finderHasRun ? `${visible.length} Suggested Roles` : "No search run yet";
 
   if (!visible.length) {
-    $("#finderResults").innerHTML = emptyState(finderHasRun ? "No API records came back from the public sources. Use the generated zip/local search links below." : "Run Auto Finder to pull roles from public job APIs and score them.");
+    $("#finderResults").innerHTML = emptyState(finderHasRun ? "No US, Bay Area, or US-remote API roles matched this search. Use the generated zip/local search links below." : "Run Auto Finder to pull roles from public job APIs and score them.");
     return;
   }
 
-  const fallbackNotice = usingFallback ? `<p class="empty-state">Your score/flexible filters hid every API candidate, so this is showing the best broad API results instead. Lower the filters or save only roles that actually fit.</p>` : "";
+  const fallbackNotice = usingFallback ? `<p class="empty-state">Your score/flexible filters hid every compatible API candidate, so this is showing the best US/Bay Area/US-remote broad results instead. Lower the filters or use the local search links.</p>` : "";
 
   $("#finderResults").innerHTML = fallbackNotice + visible.map((job) => `
     <article class="finder-card">
@@ -1060,7 +1063,8 @@ function scoreDiscoveryRelevance(text, directBridgeMatch, locationMatch) {
   return score;
 }
 
-function getMatchQuality(directBridgeMatch, locationMatch, badFit) {
+function getMatchQuality(directBridgeMatch, locationMatch, badFit, outsideTargetRegion = false) {
+  if (outsideTargetRegion) return "Outside target region";
   if (badFit && !directBridgeMatch) return "Broad API candidate";
   if (directBridgeMatch && locationMatch) return "Direct API match";
   if (directBridgeMatch) return "Role match, verify location";
@@ -1070,6 +1074,17 @@ function getMatchQuality(directBridgeMatch, locationMatch, badFit) {
 
 function isBadFinderFit(text) {
   return /sales|account executive|account payable|marketing|copywriter|writer|recruit|brand manager|designer|software engineer|full.stack|frontend|backend|developer|video editor|office assistant|administrative assistant|learning & development|product manager|social media|template|head of|director|vp/.test(text);
+}
+
+function isOutsideTargetRegion(job, targetLocation = "") {
+  const location = String(job.location || "").toLowerCase();
+  const target = String(targetLocation || "").toLowerCase();
+  const text = `${job.title || ""} ${job.company || ""} ${location} ${job.description || ""}`.toLowerCase();
+  const wantsUsOrBayArea = /(94523|bay area|walnut creek|concord|pleasant hill|dublin|oakland|san francisco|san jose|san mateo|cupertino|south san francisco|california|ca\b|remote|usa|u\.s\.|united states)/.test(target);
+  const explicitlyCompatible = /(remote\b|worldwide|usa|u\.s\.|united states|north america|americas|california|ca\b|san francisco|bay area|oakland|walnut creek|concord|pleasant hill|cupertino|south san francisco|san jose|san mateo|dublin)/.test(location);
+  const outsideRegion = /(germany|deutschland|berlin|munich|augsburg|gmbh|m\/w\/d|peru|lima|brazil|latam|europe only|europe,|israel|india|australia only|canada only|canada)/.test(text);
+
+  return wantsUsOrBayArea && outsideRegion && !explicitlyCompatible;
 }
 
 function isLocationCompatible(job, targetLocation = "") {
